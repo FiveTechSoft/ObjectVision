@@ -63,11 +63,16 @@ body {
 
 /* ---------- VENTANA PRINCIPAL ---------- */
 .main-window {
+  position: fixed;
   width: 1024px;
   height: 680px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 20px rgba(0,0,0,.5);
+  z-index: 1;
+}
+.main-window > .title-bar {
+  cursor: move;
 }
 
 /* ---------- MENÚ ---------- */
@@ -140,6 +145,65 @@ body {
   box-shadow: inset 0 0 10px rgba(0,0,0,.3);
 }
 
+/* ---------- VENTANAS FLOTANTES (redimensionables) ---------- */
+.form-window,
+.palette-window,
+.inspector-window {
+  overflow: hidden;
+  min-width: 120px;
+  min-height: 100px;
+}
+
+.win-resize-handle {
+  position: absolute;
+  z-index: 30;
+  background: transparent;
+}
+.win-resize-handle.se {
+  right: 0; bottom: 0;
+  width: 12px; height: 12px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 50%, var(--ov-dark) 50%, var(--ov-dark) 60%, transparent 60%),
+    linear-gradient(135deg, transparent 65%, var(--ov-dark) 65%, var(--ov-dark) 75%, transparent 75%),
+    linear-gradient(135deg, transparent 80%, var(--ov-dark) 80%, var(--ov-dark) 90%, transparent 90%);
+}
+.win-resize-handle.e {
+  top: 20px; right: 0; bottom: 12px;
+  width: 5px;
+  cursor: ew-resize;
+}
+.win-resize-handle.s {
+  left: 0; right: 12px; bottom: 0;
+  height: 5px;
+  cursor: ns-resize;
+}
+.win-resize-handle.ne {
+  right: 0; top: 0;
+  width: 10px; height: 10px;
+  cursor: nesw-resize;
+}
+.win-resize-handle.sw {
+  left: 0; bottom: 0;
+  width: 10px; height: 10px;
+  cursor: nesw-resize;
+}
+.win-resize-handle.n {
+  left: 10px; right: 10px; top: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+.win-resize-handle.w {
+  top: 10px; bottom: 12px; left: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+.win-resize-handle.nw {
+  left: 0; top: 0;
+  width: 10px; height: 10px;
+  cursor: nwse-resize;
+}
+
 /* ---------- VENTANA DEL FORMULARIO ---------- */
 .form-window {
   position: absolute;
@@ -147,6 +211,8 @@ body {
   width: 650px; height: 520px;
   display: flex; flex-direction: column;
   z-index: 10;
+  min-width: 240px;
+  min-height: 160px;
 }
 .form-canvas {
   flex: 1;
@@ -155,6 +221,7 @@ body {
   overflow: hidden;
   outline: 1px solid var(--ov-darker);
   box-shadow: inset 0 0 5px rgba(0,0,0,.2);
+  min-height: 0;
 }
 .form-canvas.design {
   background-image: radial-gradient(var(--ov-dark) 1px, transparent 1px);
@@ -167,8 +234,12 @@ body {
   position: absolute;
   right: 16px; top: 16px;
   width: 140px;
+  height: 280px;
+  display: flex;
+  flex-direction: column;
   z-index: 20;
-  max-height: 280px;
+  min-width: 110px;
+  min-height: 140px;
 }
 .palette {
   display: grid;
@@ -176,7 +247,8 @@ body {
   gap: 3px;
   padding: 4px;
   overflow-y: auto;
-  max-height: 250px;
+  flex: 1;
+  min-height: 0;
 }
 .pal-btn {
   display: flex; 
@@ -213,8 +285,10 @@ body {
   height: 290px;
   display: flex; flex-direction: column;
   z-index: 20;
+  min-width: 200px;
+  min-height: 160px;
 }
-.inspector-tabs { display: flex; padding: 3px 3px 0; gap: 2px; }
+.inspector-tabs { display: flex; padding: 3px 3px 0; gap: 2px; flex-shrink: 0; }
 .tab {
   padding: 4px 12px;
   background: var(--ov-gray);
@@ -237,6 +311,7 @@ body {
 }
 .inspector-body {
   flex: 1;
+  min-height: 0;
   background: var(--ov-white);
   border: 1px solid var(--ov-darker);
   margin: 0 3px 3px;
@@ -311,18 +386,30 @@ body {
 .ov-control.selected { 
   outline: 2px dashed var(--ov-navy);
   background-color: rgba(0, 0, 128, 0.05);
+  /* Las asas pueden salir un poco del borde */
+  overflow: visible !important;
 }
 
-.ov-control.selected::after {
-  content: "";
-  position: absolute; right: -5px; bottom: -5px;
-  width: 8px; height: 8px;
+/* Asas de redimensionado del control seleccionado */
+.ctl-resize-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
   background: var(--ov-navy);
   border: 1px solid #fff;
-  cursor: nwse-resize;
-  z-index: 5;
   box-shadow: 0 0 2px rgba(0,0,0,.5);
+  z-index: 20;
+  pointer-events: auto;
+  box-sizing: border-box;
 }
+.ctl-resize-handle.n  { top: -5px; left: 50%; margin-left: -4px; cursor: ns-resize; }
+.ctl-resize-handle.s  { bottom: -5px; left: 50%; margin-left: -4px; cursor: ns-resize; }
+.ctl-resize-handle.e  { right: -5px; top: 50%; margin-top: -4px; cursor: ew-resize; }
+.ctl-resize-handle.w  { left: -5px; top: 50%; margin-top: -4px; cursor: ew-resize; }
+.ctl-resize-handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.ctl-resize-handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.ctl-resize-handle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.ctl-resize-handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
 
 .ov-label { 
   display: flex; 

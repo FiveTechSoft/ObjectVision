@@ -429,13 +429,22 @@ function renderAll() {
 }
 
 /* ==================== INTERACCIÓN ==================== */
+const CTL_RESIZE_DIRS = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+const CTL_MIN_W = 16;
+const CTL_MIN_H = 12;
+
+function snap4(v) { return Math.round(v / 4) * 4; }
+
 function attachControlEvents(el, c) {
   el.addEventListener("pointerdown", e => {
     if (state.mode !== "design") return;
     e.stopPropagation();
+    if (e.button !== 0) return;
+
+    const handle = e.target.closest(".ctl-resize-handle");
     selectControl(c.id);
-    if (e.target.classList.contains("resize-handle")) {
-      startResize(e, c);
+    if (handle) {
+      startControlResize(e, c, handle.dataset.dir || "se");
     } else {
       startDrag(e, c, el);
     }
@@ -454,11 +463,13 @@ canvas.addEventListener("pointerdown", e => {
 });
 
 function startDrag(e, c, el) {
+  e.preventDefault();
   const sx = e.clientX, sy = e.clientY;
   const ox = c.left, oy = c.top;
+  try { el.setPointerCapture(e.pointerId); } catch (_) {}
   const move = ev => {
-    c.left = Math.max(0, Math.round((ox + ev.clientX - sx) / 4) * 4);
-    c.top  = Math.max(0, Math.round((oy + ev.clientY - sy) / 4) * 4);
+    c.left = Math.max(0, snap4(ox + ev.clientX - sx));
+    c.top  = Math.max(0, snap4(oy + ev.clientY - sy));
     el.style.left = c.left + "px";
     el.style.top = c.top + "px";
     updatePosStatus(c);
@@ -473,17 +484,64 @@ function startDrag(e, c, el) {
   window.addEventListener("pointerup", up);
 }
 
-function startResize(e, c) {
+function startControlResize(e, c, dir) {
+  e.preventDefault();
+  e.stopPropagation();
   const sx = e.clientX, sy = e.clientY;
-  const ow = c.width, oh = c.height;
+  const start = { left: c.left, top: c.top, width: c.width, height: c.height };
   const el = document.getElementById(c.id);
+  if (!el) return;
+  try { el.setPointerCapture(e.pointerId); } catch (_) {}
+
   const move = ev => {
-    c.width  = Math.max(16, Math.round((ow + ev.clientX - sx) / 4) * 4);
-    c.height = Math.max(12, Math.round((oh + ev.clientY - sy) / 4) * 4);
+    const dx = ev.clientX - sx;
+    const dy = ev.clientY - sy;
+    let left = start.left, top = start.top, width = start.width, height = start.height;
+
+    if (dir.includes("e")) width = start.width + dx;
+    if (dir.includes("s")) height = start.height + dy;
+    if (dir.includes("w")) {
+      width = start.width - dx;
+      left = start.left + dx;
+    }
+    if (dir.includes("n")) {
+      height = start.height - dy;
+      top = start.top + dy;
+    }
+
+    // Mínimos (corrigiendo left/top si se arrastra desde n/w)
+    if (width < CTL_MIN_W) {
+      if (dir.includes("w")) left = start.left + start.width - CTL_MIN_W;
+      width = CTL_MIN_W;
+    }
+    if (height < CTL_MIN_H) {
+      if (dir.includes("n")) top = start.top + start.height - CTL_MIN_H;
+      height = CTL_MIN_H;
+    }
+
+    // No salir por la izquierda/arriba del lienzo
+    if (left < 0) {
+      if (dir.includes("w")) width += left;
+      left = 0;
+    }
+    if (top < 0) {
+      if (dir.includes("n")) height += top;
+      top = 0;
+    }
+
+    c.left = snap4(left);
+    c.top = snap4(top);
+    c.width = Math.max(CTL_MIN_W, snap4(width));
+    c.height = Math.max(CTL_MIN_H, snap4(height));
+
+    el.style.left = c.left + "px";
+    el.style.top = c.top + "px";
     el.style.width = c.width + "px";
     el.style.height = c.height + "px";
+    updatePosStatus(c);
     refreshInspectorNumbers(c);
   };
+
   const up = () => {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
@@ -495,10 +553,15 @@ function startResize(e, c) {
 
 function markSelected(el) {
   el.classList.add("selected");
-  const h = document.createElement("div");
-  h.className = "resize-handle";
-  h.style.cssText = "position:absolute;right:-5px;bottom:-5px;width:8px;height:8px;background:#000080;border:1px solid #fff;cursor:nwse-resize;z-index:5;";
-  el.appendChild(h);
+  // Quitar asas previas por si se re-renderiza
+  el.querySelectorAll(".ctl-resize-handle").forEach(h => h.remove());
+  CTL_RESIZE_DIRS.forEach(dir => {
+    const h = document.createElement("div");
+    h.className = "ctl-resize-handle " + dir;
+    h.dataset.dir = dir;
+    h.title = "Redimensionar";
+    el.appendChild(h);
+  });
 }
 
 /* ==================== SELECCIÓN ==================== */
@@ -506,7 +569,7 @@ function selectControl(id) {
   state.selectedId = id;
   document.querySelectorAll(".ov-control.selected").forEach(e => {
     e.classList.remove("selected");
-    e.querySelector(".resize-handle")?.remove();
+    e.querySelectorAll(".ctl-resize-handle, .resize-handle").forEach(h => h.remove());
   });
   if (id) {
     const el = document.getElementById(id);
@@ -892,19 +955,46 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
   });
 });
 
-/* ==================== VENTANAS FLOTANTES ==================== */
-["formWindow", "paletteWindow", "inspectorWindow"].forEach(id => {
-  const win = document.getElementById(id);
-  const bar = win.querySelector(".title-bar");
+/* ==================== VENTANA PRINCIPAL (arrastrable) ==================== */
+(function enableMainWindowDrag() {
+  const win = document.getElementById("mainWindow");
+  if (!win) return;
+  const bar = win.querySelector(":scope > .title-bar");
+  if (!bar) return;
+
+  function centerMainWindow() {
+    const w = win.offsetWidth || 1024;
+    const h = win.offsetHeight || 680;
+    win.style.left = Math.max(0, Math.round((window.innerWidth - w) / 2)) + "px";
+    win.style.top = Math.max(0, Math.round((window.innerHeight - h) / 2)) + "px";
+  }
+  centerMainWindow();
+  window.addEventListener("resize", () => {
+    // Mantener la ventana visible si se redimensiona el navegador
+    const r = win.getBoundingClientRect();
+    const maxL = Math.max(0, window.innerWidth - 80);
+    const maxT = Math.max(0, window.innerHeight - 40);
+    if (r.left > maxL) win.style.left = maxL + "px";
+    if (r.top > maxT) win.style.top = maxT + "px";
+    if (r.left < 0) win.style.left = "0px";
+    if (r.top < 0) win.style.top = "0px";
+  });
+
   bar.addEventListener("pointerdown", e => {
-    const area = document.getElementById("mdiArea").getBoundingClientRect();
-    const wr = win.getBoundingClientRect();
-    const dx = e.clientX - wr.left, dy = e.clientY - wr.top;
-    win.style.zIndex = ++state.zTop + 20;
+    if (e.button !== 0) return;
+    // No arrastrar al pulsar los botones de la barra
+    if (e.target.closest(".title-buttons, .tb-btn")) return;
+    e.preventDefault();
+    const r = win.getBoundingClientRect();
+    const dx = e.clientX - r.left;
+    const dy = e.clientY - r.top;
+    try { bar.setPointerCapture(e.pointerId); } catch (_) {}
+
     const move = ev => {
-      win.style.left = Math.min(Math.max(0, ev.clientX - area.left - dx), area.width - 60) + "px";
-      win.style.top  = Math.min(Math.max(0, ev.clientY - area.top - dy), area.height - 30) + "px";
-      win.style.right = "auto";
+      const left = Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - 80);
+      const top = Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - 40);
+      win.style.left = left + "px";
+      win.style.top = top + "px";
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -913,15 +1003,141 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   });
+})();
+
+/* ==================== VENTANAS FLOTANTES ==================== */
+const FLOATING_WINDOWS = [
+  { id: "formWindow",      minW: 240, minH: 160, def: { left: 16, top: 16, width: 650, height: 520, right: null } },
+  { id: "paletteWindow",   minW: 110, minH: 140, def: { left: null, top: 16, width: 140, height: 280, right: 16 } },
+  { id: "inspectorWindow", minW: 200, minH: 160, def: { left: null, top: 310, width: 320, height: 290, right: 16 } },
+];
+
+const RESIZE_HANDLES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
+function pinWindowToLeft(win, area) {
+  const wr = win.getBoundingClientRect();
+  win.style.left = (wr.left - area.left) + "px";
+  win.style.top = (wr.top - area.top) + "px";
+  win.style.right = "auto";
+  win.style.width = wr.width + "px";
+  win.style.height = wr.height + "px";
+  return { left: wr.left - area.left, top: wr.top - area.top, width: wr.width, height: wr.height };
+}
+
+function startWindowResize(e, win, dir, minW, minH) {
+  e.preventDefault();
+  e.stopPropagation();
+  const areaEl = document.getElementById("mdiArea");
+  const area = areaEl.getBoundingClientRect();
+  const start = pinWindowToLeft(win, area);
+  const sx = e.clientX, sy = e.clientY;
+  win.style.zIndex = ++state.zTop + 20;
+
+  const move = ev => {
+    const dx = ev.clientX - sx;
+    const dy = ev.clientY - sy;
+    let { left, top, width, height } = start;
+
+    if (dir.includes("e")) width = start.width + dx;
+    if (dir.includes("s")) height = start.height + dy;
+    if (dir.includes("w")) {
+      width = start.width - dx;
+      left = start.left + dx;
+    }
+    if (dir.includes("n")) {
+      height = start.height - dy;
+      top = start.top + dy;
+    }
+
+    // Mínimos (ajustando left/top si se redimensiona desde n/w)
+    if (width < minW) {
+      if (dir.includes("w")) left = start.left + start.width - minW;
+      width = minW;
+    }
+    if (height < minH) {
+      if (dir.includes("n")) top = start.top + start.height - minH;
+      height = minH;
+    }
+
+    // Mantener dentro del área MDI
+    if (left < 0) {
+      if (dir.includes("w")) width += left;
+      left = 0;
+    }
+    if (top < 0) {
+      if (dir.includes("n")) height += top;
+      top = 0;
+    }
+    if (left + width > area.width) width = Math.max(minW, area.width - left);
+    if (top + height > area.height) height = Math.max(minH, area.height - top);
+
+    win.style.left = left + "px";
+    win.style.top = top + "px";
+    win.style.width = width + "px";
+    win.style.height = height + "px";
+  };
+
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+FLOATING_WINDOWS.forEach(({ id, minW, minH }) => {
+  const win = document.getElementById(id);
+  if (!win) return;
+
+  // Arrastre por la barra de título
+  const bar = win.querySelector(".title-bar");
+  bar.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    const area = document.getElementById("mdiArea").getBoundingClientRect();
+    const wr = win.getBoundingClientRect();
+    const dx = e.clientX - wr.left, dy = e.clientY - wr.top;
+    pinWindowToLeft(win, area);
+    win.style.zIndex = ++state.zTop + 20;
+    const move = ev => {
+      win.style.left = Math.min(Math.max(0, ev.clientX - area.left - dx), area.width - 60) + "px";
+      win.style.top  = Math.min(Math.max(0, ev.clientY - area.top - dy), area.height - 30) + "px";
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+
+  // Asas de redimensionado
+  RESIZE_HANDLES.forEach(dir => {
+    const h = document.createElement("div");
+    h.className = "win-resize-handle " + dir;
+    h.title = "Redimensionar";
+    h.addEventListener("pointerdown", e => {
+      if (e.button !== 0) return;
+      startWindowResize(e, win, dir, minW, minH);
+    });
+    win.appendChild(h);
+  });
 });
 
 function resetWindows() {
-  const f = document.getElementById("formWindow");
-  f.style.left = "16px"; f.style.top = "16px";
-  const p = document.getElementById("paletteWindow");
-  p.style.left = "auto"; p.style.right = "16px"; p.style.top = "16px";
-  const i = document.getElementById("inspectorWindow");
-  i.style.left = "auto"; i.style.right = "16px"; i.style.top = "290px";
+  FLOATING_WINDOWS.forEach(({ id, def }) => {
+    const w = document.getElementById(id);
+    if (!w) return;
+    w.style.width = def.width + "px";
+    w.style.height = def.height + "px";
+    w.style.top = def.top + "px";
+    if (def.left != null) {
+      w.style.left = def.left + "px";
+      w.style.right = "auto";
+    } else {
+      w.style.left = "auto";
+      w.style.right = def.right + "px";
+    }
+  });
   msg("Ventanas reordenadas.");
 }
 
