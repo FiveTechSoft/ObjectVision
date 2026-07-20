@@ -784,6 +784,8 @@ const MENUS = {
     { label: "Modo diseño", action: () => setMode("design") },
     { label: "Modo ejecución", action: () => setMode("run") },
     "sep",
+    { label: "Maximizar ventana", action: () => window.__ovMaximize && window.__ovMaximize() },
+    { label: "Restaurar ventana", action: () => window.__ovRestore && window.__ovRestore() },
     { label: "Centrar ventanas", action: resetWindows },
   ],
   object: [
@@ -1000,6 +1002,7 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
     const maxBtn = document.getElementById("btnMaximize");
     if (maxBtn) {
       maxBtn.title = isMax ? "Restaurar" : "Maximizar";
+      maxBtn.setAttribute("aria-label", maxBtn.title);
       maxBtn.textContent = isMax ? "❐" : "▢";
     }
   }
@@ -1009,32 +1012,47 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
     const r = win.getBoundingClientRect();
     restored = { left: r.left, top: r.top, width: r.width, height: r.height };
     win.dataset.minimized = "0";
+    // Aplicar tamaño a pantalla completa de forma explícita (no solo CSS)
+    win.classList.add("placed", "maximized");
+    win.style.transform = "none";
+    win.style.left = "0px";
+    win.style.top = "0px";
+    win.style.right = "auto";
+    win.style.bottom = "auto";
+    win.style.width = window.innerWidth + "px";
+    win.style.height = window.innerHeight + "px";
     setMaximizedUI(true);
+    if (typeof msg === "function") msg("Ventana maximizada.");
   }
 
   function restoreWindow() {
     if (!maximized && win.dataset.minimized !== "1") return;
     win.dataset.minimized = "0";
-    if (restored) applyBox(restored.left, restored.top, restored.width, restored.height);
-    else {
+    win.classList.remove("maximized");
+    maximized = false;
+    if (restored) {
+      applyBox(restored.left, restored.top, restored.width, restored.height);
+    } else {
       const w = Math.min(1024, window.innerWidth - 16);
       const h = Math.min(680, window.innerHeight - 16);
       applyBox((window.innerWidth - w) / 2, (window.innerHeight - h) / 2, w, h);
     }
     restored = null;
     setMaximizedUI(false);
+    if (typeof msg === "function") msg("Ventana restaurada.");
   }
 
   function toggleMaximize(ev) {
-    if (ev) {
+    if (ev && typeof ev.preventDefault === "function") {
       ev.preventDefault();
       ev.stopPropagation();
     }
     if (maximized) restoreWindow();
     else maximizeWindow();
+    return false;
   }
 
-  // API global (también usada por onclick del HTML)
+  // API global (onclick HTML + menú)
   window.__ovToggleMax = toggleMaximize;
   window.__ovMaximize = maximizeWindow;
   window.__ovRestore = restoreWindow;
@@ -1045,6 +1063,17 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
     // Solo si el puntero está sobre o muy cerca del marco de la ventana
     if (clientX < r.left - 2 || clientX > r.right + 2 ||
         clientY < r.top - 2 || clientY > r.bottom + 2) return "";
+
+    // No redimensionar encima de los botones min/max
+    const buttons = win.querySelector(".title-buttons");
+    if (buttons) {
+      const br = buttons.getBoundingClientRect();
+      if (clientX >= br.left - 6 && clientX <= br.right + 6 &&
+          clientY >= br.top - 6 && clientY <= br.bottom + 6) {
+        return "";
+      }
+    }
+
     let dir = "";
     if (clientY - r.top <= EDGE) dir += "n";
     else if (r.bottom - clientY <= EDGE) dir += "s";
@@ -1186,16 +1215,25 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
     toggleMaximize();
   });
 
-  // Botones maximizar / minimizar
+  // Botón maximizar: mousedown + click (por si el navegador cancela uno)
   const maxBtn = document.getElementById("btnMaximize");
   if (maxBtn) {
-    maxBtn.addEventListener("mousedown", e => { e.preventDefault(); e.stopPropagation(); });
-    maxBtn.addEventListener("click", e => toggleMaximize(e));
+    const onMax = e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMaximize(e);
+    };
+    maxBtn.addEventListener("mousedown", e => {
+      // No preventDefault aquí: en algunos navegadores bloquea el click
+      e.stopPropagation();
+    }, true);
+    maxBtn.addEventListener("mouseup", e => e.stopPropagation(), true);
+    maxBtn.addEventListener("click", onMax, true);
   }
 
   const minBtn = document.getElementById("btnMinimize");
   if (minBtn) {
-    minBtn.addEventListener("mousedown", e => { e.preventDefault(); e.stopPropagation(); });
+    minBtn.addEventListener("mousedown", e => e.stopPropagation(), true);
     minBtn.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
@@ -1207,19 +1245,25 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
           const r = win.getBoundingClientRect();
           restored = { left: r.left, top: r.top, width: r.width, height: r.height };
         } else {
-          // ya guardado en restored al maximizar
-          setMaximizedUI(false);
+          win.classList.remove("maximized");
           maximized = false;
         }
         applyBox(8, window.innerHeight - 36, 240, 32);
         win.dataset.minimized = "1";
         minBtn.title = "Restaurar";
       }
-    });
+    }, true);
   }
 
   window.addEventListener("resize", () => {
-    if (maximized) return; // CSS .maximized ya llena el viewport
+    if (maximized) {
+      // Mantener a pantalla completa al redimensionar el navegador
+      win.style.width = window.innerWidth + "px";
+      win.style.height = window.innerHeight + "px";
+      win.style.left = "0px";
+      win.style.top = "0px";
+      return;
+    }
     const r = win.getBoundingClientRect();
     let left = r.left, top = r.top, width = r.width, height = r.height;
     if (width > window.innerWidth) width = window.innerWidth;
