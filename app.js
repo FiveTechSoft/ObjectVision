@@ -186,14 +186,18 @@ function renderControl(c) {
       el.textContent = c.caption;
       el.style.color = c.color;
       el.style.fontSize = c.fontSize + "px";
-      if (state.mode === "run") {
-        el.style.cursor = "pointer";
-        el.addEventListener("click", e => {
-          e.stopPropagation();
-          if (!c.enabled) return;
-          fireEvent(c, "OnClick");
-        });
-      }
+      el.style.cursor = state.mode === "run" ? "pointer" : "default";
+      // En ejecución: OnClick; en diseño: Shift+clic prueba el evento
+      el.addEventListener("click", e => {
+        e.stopPropagation();
+        const live = getControl(c.id) || c;
+        if (!live.enabled) return;
+        if (state.mode === "run" || e.shiftKey) {
+          fireEvent(live, "OnClick");
+        } else {
+          msg("Botón: pulse ▶ Ejecutar (o Shift+clic) para probar OnClick.");
+        }
+      });
       break;
       
     case "edit": {
@@ -451,6 +455,8 @@ function attachControlEvents(el, c) {
 
     const handle = e.target.closest(".ctl-resize-handle");
     selectControl(c.id);
+    // Shift+clic en botón: no arrastrar; el click disparará OnClick de prueba
+    if (e.shiftKey && c.type === "button" && !handle) return;
     if (handle) {
       startControlResize(e, c, handle.dataset.dir || "se");
     } else {
@@ -678,27 +684,62 @@ function buildInspector() {
   });
 
   // Eventos
-  Object.entries(c.events || {}).forEach(([evName, ev]) => {
+  if (!c.events) {
+    c.events = {
+      OnClick: { action: "none", message: "" },
+      OnChange: { action: "none", message: "" },
+      OnFocus: { action: "none", message: "" },
+      OnBlur: { action: "none", message: "" },
+    };
+  }
+
+  Object.entries(c.events).forEach(([evName, ev]) => {
+    if (!ev || typeof ev !== "object") {
+      c.events[evName] = { action: "none", message: "" };
+      ev = c.events[evName];
+    }
+
     const row = document.createElement("div");
     row.className = "ev-row";
     row.innerHTML = `<span class="ev-name"><span class="bolt">⚡</span> ${evName}</span>`;
     const wrap = document.createElement("span");
     wrap.className = "prop-val";
+    wrap.style.display = "flex";
+    wrap.style.gap = "4px";
+    wrap.style.alignItems = "center";
+
     const sel = document.createElement("select");
+    sel.style.flex = "1";
     sel.innerHTML = `
       <option value="none"${ev.action === "none" ? " selected" : ""}>(ninguna)</option>
       <option value="message"${ev.action === "message" ? " selected" : ""}>Mostrar mensaje</option>
       <option value="alert"${ev.action === "alert" ? " selected" : ""}>Alerta</option>
       <option value="disable"${ev.action === "disable" ? " selected" : ""}>Desactivar control</option>`;
     sel.addEventListener("change", () => {
-      ev.action = sel.value;
-      if ((ev.action === "message" || ev.action === "alert") && !ev.message) {
-        ev.message = "Hola desde " + (c.name || evName);
+      // Asignar en el objeto del control (no solo por referencia local)
+      if (!c.events[evName]) c.events[evName] = { action: "none", message: "" };
+      c.events[evName].action = sel.value;
+      if ((sel.value === "message" || sel.value === "alert") && !c.events[evName].message) {
+        c.events[evName].message = "Hola desde " + (c.name || evName);
       }
+      msg(`${evName} → ${sel.value}` + (c.events[evName].message ? ` («${c.events[evName].message}»)` : ""));
       buildInspector();
       pushHistory();
     });
-    wrap.appendChild(sel);
+
+    const testBtn = document.createElement("button");
+    testBtn.type = "button";
+    testBtn.textContent = "▶";
+    testBtn.title = "Probar este evento ahora";
+    testBtn.className = "ev-test-btn";
+    testBtn.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const live = getControl(c.id) || c;
+      fireEvent(live, evName);
+    });
+
+    wrap.append(sel, testBtn);
     row.appendChild(wrap);
     inspEvents.appendChild(row);
 
@@ -714,10 +755,12 @@ function buildInspector() {
       msgInp.value = ev.message || "";
       msgInp.placeholder = "Texto a mostrar…";
       msgInp.addEventListener("change", () => {
-        ev.message = msgInp.value;
+        c.events[evName].message = msgInp.value;
         pushHistory();
       });
-      msgInp.addEventListener("input", () => { ev.message = msgInp.value; });
+      msgInp.addEventListener("input", () => {
+        c.events[evName].message = msgInp.value;
+      });
       msgWrap.appendChild(msgInp);
       msgRow.appendChild(msgWrap);
       inspEvents.appendChild(msgRow);
@@ -756,18 +799,26 @@ function setMode(mode) {
 }
 
 function fireEvent(c, evName) {
-  if (!c || !c.events) return;
-  const ev = c.events[evName];
-  if (!ev || !ev.action || ev.action === "none") return;
+  // Siempre leer del estado actual por si hubo re-render/historial
+  const live = (c && c.id && getControl(c.id)) || c;
+  if (!live) return;
+  if (!live.events) return;
+  const ev = live.events[evName];
+  if (!ev || !ev.action || ev.action === "none") {
+    msg(`Evento ${evName} sin acción configurada.`);
+    return;
+  }
 
   if (ev.action === "message") {
-    showRetroMessage(ev.message || "(mensaje vacío)", c.name || "ObjectVision");
+    showRetroMessage(ev.message || "(mensaje vacío)", live.name || "ObjectVision");
+    msg(`Mensaje: ${ev.message || "(vacío)"}`);
   } else if (ev.action === "alert") {
-    // Cuadro nativo del navegador
     window.alert(ev.message || ("Evento: " + evName));
+    msg(`Alerta: ${ev.message || evName}`);
   } else if (ev.action === "disable") {
-    c.enabled = !c.enabled;
-    renderControl(c);
+    live.enabled = !live.enabled;
+    renderControl(live);
+    msg(`${live.name} ${live.enabled ? "habilitado" : "deshabilitado"}.`);
   }
 }
 
