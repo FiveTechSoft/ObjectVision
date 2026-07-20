@@ -1447,46 +1447,6 @@ canvas.addEventListener("pointermove", e => {
   if (!state.selectedId) stPos.textContent = `X:${Math.round(e.clientX - r.left)} Y:${Math.round(e.clientY - r.top)}`;
 });
 
-/* ==================== EJEMPLO INICIAL MEJORADO ==================== */
-(function seed() {
-  const g = addControl("groupbox", 24, 20); 
-  g.caption = "Registro de Cliente"; 
-  g.width = 320; 
-  g.height = 200;
-  
-  const l1 = addControl("label", 44, 56);  
-  l1.caption = "Nombre:";
-  const e1 = addControl("edit", 140, 52);  
-  e1.width = 160;
-  e1.placeholder = "Juan Pérez";
-  
-  const l2 = addControl("label", 44, 92);  
-  l2.caption = "Email:";
-  const e2 = addControl("edit", 140, 88);  
-  e2.width = 160;
-  e2.placeholder = "juan@example.com";
-  
-  const l3 = addControl("label", 44, 128);
-  l3.caption = "Tipo:";
-  const cb = addControl("combobox", 140, 124); 
-  cb.items = "Cliente Normal,Cliente Preferente,Distribuidor";
-  cb.width = 160;
-  
-  const lb = addControl("listbox", 360, 20); 
-  lb.caption = "Últimos pedidos"; 
-  lb.items = "Pedido #1001,Pedido #1002,Pedido #1003,Pedido #1004";
-  lb.width = 200;
-  
-  const b1 = addControl("button", 140, 160); 
-  b1.caption = "Guardar";
-  b1.width = 70;
-  b1.events.OnClick = { action: "message", message: "¡Cliente registrado correctamente!" };
-  
-  const b2 = addControl("button", 230, 160); 
-  b2.caption = "Limpiar";
-  b2.width = 70;
-  b2.events.OnClick = { action: "message", message: "Formulario limpiado." };
-  
-  selectControl(null);
-  msg("ObjectVision 2.1 — Formulario mejorado cargado. ¡Comience a diseñar!");
-})();
+/* ==================== INICIO ==================== */
+selectControl(null);
+msg("ObjectVision 2.1 — Formulario vacío. Elija un control de la paleta y haga clic en el lienzo.");
