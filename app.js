@@ -1,10 +1,11 @@
 /* ============================================================
-   Borland ObjectVision — recreación web
+   Borland ObjectVision — recreación web mejorada
    Diseñador visual de formularios estilo Borland (1992)
+   v2.1 – Enhanced Edition con más controles y funcionalidades
    ============================================================ */
 "use strict";
 
-/* ---------------- Estado global ---------------- */
+/* ==================== ESTADO GLOBAL ==================== */
 const state = {
   mode: "design",        // "design" | "run"
   tool: null,            // herramienta activa de la paleta
@@ -12,6 +13,9 @@ const state = {
   selectedId: null,
   counter: {},
   zTop: 1,
+  clipboard: null,       // para copiar/pegar
+  history: [],           // deshacer/rehacer
+  historyIndex: -1,
 };
 
 const canvas = document.getElementById("formCanvas");
@@ -23,41 +27,97 @@ const inspProps  = document.getElementById("inspectorProps");
 const inspEvents = document.getElementById("inspectorEvents");
 const inspTarget = document.getElementById("inspectorTarget");
 
-/* ---------------- Definición de la paleta ---------------- */
+/* ==================== PALETA EXTENDIDA ==================== */
 const PALETTE = [
-  { type: "label",    ico: "Aᴀ",  name: "Etiqueta" },
-  { type: "edit",     ico: "✎",   name: "Campo" },
-  { type: "button",   ico: "▭",   name: "Botón" },
-  { type: "checkbox", ico: "☑",   name: "Casilla" },
-  { type: "radio",    ico: "◉",   name: "Radio" },
-  { type: "listbox",  ico: "☰",   name: "Lista" },
-  { type: "groupbox", ico: "⬚",   name: "Grupo" },
-  { type: "panel",    ico: "▦",   name: "Panel" },
+  { type: "label",      ico: "Aᴀ",  name: "Etiqueta" },
+  { type: "edit",       ico: "✎",   name: "Campo texto" },
+  { type: "button",     ico: "▭",   name: "Botón" },
+  { type: "checkbox",   ico: "☑",   name: "Casilla" },
+  { type: "radio",      ico: "◉",   name: "Radio" },
+  { type: "listbox",    ico: "☰",   name: "Lista" },
+  { type: "combobox",   ico: "▾",   name: "ComboBox" },
+  { type: "spinner",    ico: "⬍",   name: "Spinner" },
+  { type: "datepicker", ico: "📅",  name: "Fecha" },
+  { type: "groupbox",   ico: "⬚",   name: "Grupo" },
+  { type: "panel",      ico: "▦",   name: "Panel" },
+  { type: "textarea",   ico: "📝",  name: "Área texto" },
 ];
 
 const TYPE_NAMES = Object.fromEntries(PALETTE.map(p => [p.type, p.name]));
 
+/* ==================== DEFINICIONES POR TIPO ==================== */
 function defaultsFor(type) {
   const base = {
     id: null, type,
     name: "", left: 10, top: 10, width: 90, height: 24,
     color: "#000000", fontSize: 11,
-    events: { OnClick: { action: "none", message: "" },
-              OnChange: { action: "none", message: "" } },
+    events: { 
+      OnClick: { action: "none", message: "" },
+      OnChange: { action: "none", message: "" },
+      OnFocus: { action: "none", message: "" },
+      OnBlur: { action: "none", message: "" },
+    },
+    visible: true,
+    enabled: true,
   };
+  
   switch (type) {
-    case "label":    return { ...base, caption: "Etiqueta1", width: 80, height: 18 };
-    case "edit":     return { ...base, text: "", width: 120, height: 22, bgColor: "#ffffff" };
-    case "button":   return { ...base, caption: "Botón1", width: 80, height: 26 };
-    case "checkbox": return { ...base, caption: "Casilla1", width: 110, height: 18, checked: false };
-    case "radio":    return { ...base, caption: "Opción1", width: 110, height: 18, checked: false, group: "Grupo1" };
-    case "listbox":  return { ...base, items: "Elemento 1,Elemento 2,Elemento 3", width: 120, height: 80 };
-    case "groupbox": return { ...base, caption: "Grupo1", width: 180, height: 110 };
-    case "panel":    return { ...base, width: 150, height: 90, bgColor: "#c0c0c0" };
+    case "label":
+      return { ...base, caption: "Etiqueta1", width: 80, height: 18 };
+    case "edit":
+      return { ...base, text: "", width: 120, height: 22, bgColor: "#ffffff", placeholder: "Ingrese texto..." };
+    case "button":
+      return { ...base, caption: "Botón1", width: 80, height: 26 };
+    case "checkbox":
+      return { ...base, caption: "Casilla1", width: 110, height: 18, checked: false };
+    case "radio":
+      return { ...base, caption: "Opción1", width: 110, height: 18, checked: false, group: "Grupo1" };
+    case "listbox":
+      return { ...base, items: "Elemento 1,Elemento 2,Elemento 3", width: 120, height: 80, selIndex: 0 };
+    case "combobox":
+      return { ...base, items: "Opción 1,Opción 2,Opción 3", width: 120, height: 24, selIndex: 0, editable: false };
+    case "spinner":
+      return { ...base, value: 0, minValue: 0, maxValue: 100, step: 1, width: 80, height: 24 };
+    case "datepicker":
+      return { ...base, value: new Date().toISOString().split('T')[0], format: "DD/MM/YYYY", width: 120, height: 24 };
+    case "textarea":
+      return { ...base, text: "", width: 200, height: 100, bgColor: "#ffffff", rows: 4, cols: 30 };
+    case "groupbox":
+      return { ...base, caption: "Grupo1", width: 180, height: 110 };
+    case "panel":
+      return { ...base, width: 150, height: 90, bgColor: "#c0c0c0", borderStyle: "solid" };
   }
 }
 
-/* ---------------- Paleta UI ---------------- */
+/* ==================== GESTOR DE HISTORIAL ==================== */
+function pushHistory() {
+  state.history = state.history.slice(0, state.historyIndex + 1);
+  state.history.push(JSON.parse(JSON.stringify(state.controls)));
+  state.historyIndex++;
+  if (state.history.length > 20) state.history.shift();
+}
+
+function undo() {
+  if (state.historyIndex > 0) {
+    state.historyIndex--;
+    state.controls = JSON.parse(JSON.stringify(state.history[state.historyIndex]));
+    renderAll();
+    selectControl(null);
+    msg("Deshacer.");
+  }
+}
+
+function redo() {
+  if (state.historyIndex < state.history.length - 1) {
+    state.historyIndex++;
+    state.controls = JSON.parse(JSON.stringify(state.history[state.historyIndex]));
+    renderAll();
+    selectControl(null);
+    msg("Rehacer.");
+  }
+}
+
+/* ==================== PALETA UI ==================== */
 const paletteEl = document.getElementById("palette");
 PALETTE.forEach(p => {
   const b = document.createElement("button");
@@ -74,7 +134,7 @@ PALETTE.forEach(p => {
   paletteEl.appendChild(b);
 });
 
-/* ---------------- Creación de controles ---------------- */
+/* ==================== CREACIÓN DE CONTROLES ==================== */
 function nextName(type) {
   state.counter[type] = (state.counter[type] || 0) + 1;
   return `${TYPE_NAMES[type]}${state.counter[type]}`;
@@ -84,17 +144,19 @@ function addControl(type, x, y) {
   const c = defaultsFor(type);
   c.id = "ctl" + Date.now() + Math.floor(Math.random() * 1000);
   c.name = nextName(type);
-  c.left = Math.max(0, Math.round(x / 8) * 8);   // rejilla de 8px
+  c.left = Math.max(0, Math.round(x / 8) * 8);
   c.top  = Math.max(0, Math.round(y / 8) * 8);
   if (c.caption) c.caption = c.name;
+  
   state.controls.push(c);
+  pushHistory();
   renderControl(c);
   selectControl(c.id);
   msg(`${c.name} creado en (${c.left}, ${c.top}).`);
   return c;
 }
 
-/* ---------------- Render de un control ---------------- */
+/* ==================== RENDER DE CONTROLES ==================== */
 function renderControl(c) {
   const old = document.getElementById(c.id);
   if (old) old.remove();
@@ -108,6 +170,8 @@ function renderControl(c) {
   el.style.width = c.width + "px";
   el.style.height = c.height + "px";
   el.style.zIndex = c.z || 1;
+  el.style.opacity = c.visible ? 1 : 0.5;
+  el.style.pointerEvents = c.enabled ? "auto" : "none";
 
   switch (c.type) {
     case "label":
@@ -116,25 +180,52 @@ function renderControl(c) {
       el.style.color = c.color;
       el.style.fontSize = c.fontSize + "px";
       break;
+      
     case "button":
       el.classList.add("ov-button-ctl");
       el.textContent = c.caption;
       el.style.color = c.color;
       el.style.fontSize = c.fontSize + "px";
       break;
+      
     case "edit": {
       el.classList.add("ov-edit-ctl");
       el.style.background = c.bgColor;
       const inp = document.createElement("input");
+      inp.type = "text";
       inp.value = c.text;
+      inp.placeholder = c.placeholder || "";
       inp.readOnly = state.mode === "design";
       inp.style.color = c.color;
       inp.style.fontSize = c.fontSize + "px";
       inp.addEventListener("input", () => { c.text = inp.value; fireEvent(c, "OnChange"); });
+      inp.addEventListener("focus", () => fireEvent(c, "OnFocus"));
+      inp.addEventListener("blur", () => fireEvent(c, "OnBlur"));
       inp.addEventListener("pointerdown", e => { if (state.mode === "design") e.preventDefault(); e.stopPropagation(); });
       el.appendChild(inp);
       break;
     }
+    
+    case "textarea": {
+      el.classList.add("ov-textarea-ctl");
+      el.style.background = c.bgColor;
+      const ta = document.createElement("textarea");
+      ta.value = c.text;
+      ta.readOnly = state.mode === "design";
+      ta.rows = c.rows || 4;
+      ta.cols = c.cols || 30;
+      ta.style.color = c.color;
+      ta.style.fontSize = c.fontSize + "px";
+      ta.style.width = "100%";
+      ta.style.height = "100%";
+      ta.style.border = "none";
+      ta.style.padding = "2px";
+      ta.addEventListener("input", () => { c.text = ta.value; fireEvent(c, "OnChange"); });
+      ta.addEventListener("pointerdown", e => { if (state.mode === "design") e.preventDefault(); e.stopPropagation(); });
+      el.appendChild(ta);
+      break;
+    }
+    
     case "checkbox": {
       el.classList.add("ov-check-ctl");
       el.style.fontSize = c.fontSize + "px";
@@ -145,8 +236,19 @@ function renderControl(c) {
       lab.textContent = c.caption;
       lab.style.color = c.color;
       el.append(box, lab);
+      if (state.mode === "run") {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          c.checked = !c.checked;
+          renderControl(c);
+          fireEvent(c, "OnChange");
+          fireEvent(c, "OnClick");
+        });
+      }
       break;
     }
+    
     case "radio": {
       el.classList.add("ov-radio-ctl");
       el.style.fontSize = c.fontSize + "px";
@@ -156,8 +258,25 @@ function renderControl(c) {
       lab.textContent = c.caption;
       lab.style.color = c.color;
       el.append(box, lab);
+      if (state.mode === "run") {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          state.controls.forEach(o => {
+            if (o.type === "radio" && o.group === c.group && o.checked) {
+              o.checked = false;
+              renderControl(o);
+            }
+          });
+          c.checked = true;
+          renderControl(c);
+          fireEvent(c, "OnChange");
+          fireEvent(c, "OnClick");
+        });
+      }
       break;
     }
+    
     case "listbox": {
       el.classList.add("ov-list-ctl");
       el.style.fontSize = c.fontSize + "px";
@@ -166,23 +285,129 @@ function renderControl(c) {
         li.className = "li" + (i === (c.selIndex ?? 0) ? " sel" : "");
         li.textContent = t.trim();
         li.style.color = c.color;
-        li.addEventListener("click", e => {
-          if (state.mode === "run") {
+        if (state.mode === "run") {
+          li.style.cursor = "pointer";
+          li.addEventListener("click", e => {
             e.stopPropagation();
             c.selIndex = i;
             el.querySelectorAll(".li").forEach(x => x.classList.remove("sel"));
             li.classList.add("sel");
             fireEvent(c, "OnChange");
-          }
-        });
+            fireEvent(c, "OnClick");
+          });
+        }
         el.appendChild(li);
       });
       break;
     }
+    
+    case "combobox": {
+      el.classList.add("ov-combobox-ctl");
+      el.style.fontSize = c.fontSize + "px";
+      const select = document.createElement("select");
+      select.style.width = "100%";
+      select.style.height = "100%";
+      select.style.fontSize = c.fontSize + "px";
+      select.style.border = "1px solid #000080";
+      select.style.borderRadius = "2px";
+      select.readOnly = state.mode === "design";
+      (c.items || "").split(",").forEach((t, i) => {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = t.trim();
+        if (i === (c.selIndex ?? 0)) opt.selected = true;
+        select.appendChild(opt);
+      });
+      select.addEventListener("change", () => {
+        c.selIndex = parseInt(select.value);
+        fireEvent(c, "OnChange");
+      });
+      select.addEventListener("pointerdown", e => { if (state.mode === "design") e.preventDefault(); e.stopPropagation(); });
+      el.appendChild(select);
+      break;
+    }
+    
+    case "spinner": {
+      el.classList.add("ov-spinner-ctl");
+      el.style.display = "flex";
+      el.style.alignItems = "center";
+      el.style.gap = "4px";
+      el.style.padding = "2px";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.value = c.value;
+      input.min = c.minValue;
+      input.max = c.maxValue;
+      input.style.flex = "1";
+      input.style.border = "1px solid #000080";
+      input.readOnly = state.mode === "design";
+      input.addEventListener("change", () => {
+        c.value = parseInt(input.value) || 0;
+        fireEvent(c, "OnChange");
+      });
+      input.addEventListener("pointerdown", e => { if (state.mode === "design") e.preventDefault(); e.stopPropagation(); });
+      const btnUp = document.createElement("button");
+      btnUp.textContent = "▲";
+      btnUp.style.width = "20px";
+      btnUp.style.height = "12px";
+      btnUp.style.padding = "0";
+      btnUp.style.fontSize = "8px";
+      if (state.mode === "run") {
+        btnUp.addEventListener("click", e => {
+          e.stopPropagation();
+          c.value = Math.min(c.maxValue, c.value + c.step);
+          input.value = c.value;
+          fireEvent(c, "OnChange");
+        });
+      }
+      const btnDn = document.createElement("button");
+      btnDn.textContent = "▼";
+      btnDn.style.width = "20px";
+      btnDn.style.height = "12px";
+      btnDn.style.padding = "0";
+      btnDn.style.fontSize = "8px";
+      if (state.mode === "run") {
+        btnDn.addEventListener("click", e => {
+          e.stopPropagation();
+          c.value = Math.max(c.minValue, c.value - c.step);
+          input.value = c.value;
+          fireEvent(c, "OnChange");
+        });
+      }
+      el.appendChild(input);
+      const btns = document.createElement("div");
+      btns.style.display = "flex";
+      btns.style.flexDirection = "column";
+      btns.style.gap = "0px";
+      btns.appendChild(btnUp);
+      btns.appendChild(btnDn);
+      el.appendChild(btns);
+      break;
+    }
+    
+    case "datepicker": {
+      el.classList.add("ov-datepicker-ctl");
+      const input = document.createElement("input");
+      input.type = "date";
+      input.value = c.value;
+      input.style.width = "100%";
+      input.style.height = "100%";
+      input.style.border = "1px solid #000080";
+      input.readOnly = state.mode === "design";
+      input.addEventListener("change", () => {
+        c.value = input.value;
+        fireEvent(c, "OnChange");
+      });
+      input.addEventListener("pointerdown", e => { if (state.mode === "design") e.preventDefault(); e.stopPropagation(); });
+      el.appendChild(input);
+      break;
+    }
+    
     case "groupbox":
       el.classList.add("ov-group-ctl");
       el.innerHTML = `<span class="gtitle" style="color:${c.color};font-size:${c.fontSize}px">${esc(c.caption)}</span>`;
       break;
+      
     case "panel":
       el.classList.add("ov-panel-ctl");
       el.style.background = c.bgColor;
@@ -203,10 +428,10 @@ function renderAll() {
   state.controls.forEach(renderControl);
 }
 
-/* ---------------- Interacción: colocar, seleccionar, arrastrar, redimensionar ---------------- */
+/* ==================== INTERACCIÓN ==================== */
 function attachControlEvents(el, c) {
   el.addEventListener("pointerdown", e => {
-    if (state.mode !== "design") { handleRunClick(c, e); return; }
+    if (state.mode !== "design") return;
     e.stopPropagation();
     selectControl(c.id);
     if (e.target.classList.contains("resize-handle")) {
@@ -242,6 +467,7 @@ function startDrag(e, c, el) {
   const up = () => {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
+    pushHistory();
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
@@ -261,6 +487,7 @@ function startResize(e, c) {
   const up = () => {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", up);
+    pushHistory();
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
@@ -274,7 +501,7 @@ function markSelected(el) {
   el.appendChild(h);
 }
 
-/* ---------------- Selección ---------------- */
+/* ==================== SELECCIÓN ==================== */
 function selectControl(id) {
   state.selectedId = id;
   document.querySelectorAll(".ov-control.selected").forEach(e => {
@@ -297,22 +524,30 @@ function getControl(id) { return state.controls.find(c => c.id === id); }
 function updatePosStatus(c) { stPos.textContent = `X:${c.left} Y:${c.top}`; }
 function msg(t) { stMsg.textContent = t; }
 
-/* ---------------- Inspector de propiedades ---------------- */
+/* ==================== INSPECTOR AVANZADO ==================== */
 const PROP_DEFS = {
-  label:    ["name", "caption", "left", "top", "width", "height", "color", "fontSize"],
-  button:   ["name", "caption", "left", "top", "width", "height", "color", "fontSize"],
-  edit:     ["name", "text", "left", "top", "width", "height", "color", "bgColor", "fontSize"],
-  checkbox: ["name", "caption", "checked", "left", "top", "width", "height", "color", "fontSize"],
-  radio:    ["name", "caption", "checked", "group", "left", "top", "width", "height", "color", "fontSize"],
-  listbox:  ["name", "items", "left", "top", "width", "height", "color", "fontSize"],
-  groupbox: ["name", "caption", "left", "top", "width", "height", "color", "fontSize"],
-  panel:    ["name", "left", "top", "width", "height", "bgColor"],
+  label:      ["name", "caption", "left", "top", "width", "height", "color", "fontSize", "visible", "enabled"],
+  button:     ["name", "caption", "left", "top", "width", "height", "color", "fontSize", "visible", "enabled"],
+  edit:       ["name", "text", "placeholder", "left", "top", "width", "height", "color", "bgColor", "fontSize", "visible", "enabled"],
+  textarea:   ["name", "text", "left", "top", "width", "height", "color", "bgColor", "fontSize", "rows", "cols", "visible", "enabled"],
+  checkbox:   ["name", "caption", "checked", "left", "top", "width", "height", "color", "fontSize", "visible", "enabled"],
+  radio:      ["name", "caption", "checked", "group", "left", "top", "width", "height", "color", "fontSize", "visible", "enabled"],
+  listbox:    ["name", "items", "left", "top", "width", "height", "color", "fontSize", "visible", "enabled"],
+  combobox:   ["name", "items", "left", "top", "width", "height", "color", "fontSize", "editable", "visible", "enabled"],
+  spinner:    ["name", "value", "minValue", "maxValue", "step", "left", "top", "width", "height", "visible", "enabled"],
+  datepicker: ["name", "value", "format", "left", "top", "width", "height", "visible", "enabled"],
+  groupbox:   ["name", "caption", "left", "top", "width", "height", "color", "fontSize", "visible", "enabled"],
+  panel:      ["name", "left", "top", "width", "height", "bgColor", "borderStyle", "visible", "enabled"],
 };
 
 const PROP_LABELS = {
-  name: "Nombre", caption: "Título", text: "Texto", left: "Izquierda", top: "Superior",
-  width: "Ancho", height: "Alto", color: "Color", bgColor: "ColorFondo",
-  fontSize: "Tamaño letra", checked: "Marcado", items: "Elementos", group: "Grupo",
+  name: "Nombre", caption: "Título", text: "Texto", placeholder: "Placeholder",
+  left: "Izquierda", top: "Superior", width: "Ancho", height: "Alto",
+  color: "Color", bgColor: "Color Fondo", fontSize: "Tamaño letra",
+  checked: "Marcado", items: "Elementos", group: "Grupo",
+  value: "Valor", minValue: "Mínimo", maxValue: "Máximo", step: "Paso",
+  format: "Formato", rows: "Filas", cols: "Columnas", editable: "Editable",
+  borderStyle: "Estilo borde", visible: "Visible", enabled: "Habilitado",
 };
 
 function buildInspector() {
@@ -327,21 +562,26 @@ function buildInspector() {
     return;
   }
 
-  PROP_DEFS[c.type].forEach(key => {
+  PROP_DEFS[c.type]?.forEach(key => {
     const row = document.createElement("div");
     row.className = "prop-row";
     const val = c[key];
     let input;
+    
     if (key === "checked") {
       input = document.createElement("select");
       input.innerHTML = `<option value="true"${val ? " selected" : ""}>Verdadero</option><option value="false"${!val ? " selected" : ""}>Falso</option>`;
       input.addEventListener("change", () => { c.checked = input.value === "true"; rerender(c); });
+    } else if (key === "visible" || key === "enabled" || key === "editable") {
+      input = document.createElement("select");
+      input.innerHTML = `<option value="true"${val ? " selected" : ""}>Sí</option><option value="false"${!val ? " selected" : ""}>No</option>`;
+      input.addEventListener("change", () => { c[key] = input.value === "true"; rerender(c); });
     } else if (key === "color" || key === "bgColor") {
       input = document.createElement("input");
       input.type = "color";
       input.value = val;
       input.addEventListener("input", () => { c[key] = input.value; rerender(c); });
-    } else if (["left", "top", "width", "height", "fontSize"].includes(key)) {
+    } else if (["left", "top", "width", "height", "fontSize", "value", "minValue", "maxValue", "step", "rows", "cols"].includes(key)) {
       input = document.createElement("input");
       input.type = "number";
       input.value = val;
@@ -357,6 +597,7 @@ function buildInspector() {
         rerender(c);
       });
     }
+    
     row.innerHTML = `<span class="prop-name">${PROP_LABELS[key] || key}</span>`;
     const wrap = document.createElement("span");
     wrap.className = "prop-val";
@@ -366,7 +607,7 @@ function buildInspector() {
   });
 
   // Eventos
-  Object.entries(c.events).forEach(([evName, ev]) => {
+  Object.entries(c.events || {}).forEach(([evName, ev]) => {
     const row = document.createElement("div");
     row.className = "ev-row";
     row.innerHTML = `<span class="ev-name"><span class="bolt">⚡</span> ${evName}</span>`;
@@ -375,11 +616,13 @@ function buildInspector() {
     const sel = document.createElement("select");
     sel.innerHTML = `
       <option value="none"${ev.action === "none" ? " selected" : ""}>(ninguna)</option>
-      <option value="message"${ev.action === "message" ? " selected" : ""}>Mostrar mensaje</option>`;
+      <option value="message"${ev.action === "message" ? " selected" : ""}>Mostrar mensaje</option>
+      <option value="alert"${ev.action === "alert" ? " selected" : ""}>Alerta</option>
+      <option value="disable"${ev.action === "disable" ? " selected" : ""}>Desactivar control</option>`;
     sel.addEventListener("change", () => {
       ev.action = sel.value;
-      if (ev.action === "message") {
-        const t = prompt("Texto del mensaje para " + evName + ":", ev.message || "¡Hola desde ObjectVision!");
+      if (ev.action === "message" || ev.action === "alert") {
+        const t = prompt("Texto para " + evName + ":", ev.message || "");
         ev.message = t ?? ev.message;
       }
       buildInspector();
@@ -387,7 +630,8 @@ function buildInspector() {
     wrap.appendChild(sel);
     row.appendChild(wrap);
     inspEvents.appendChild(row);
-    if (ev.action === "message" && ev.message) {
+    
+    if ((ev.action === "message" || ev.action === "alert") && ev.message) {
       const info = document.createElement("div");
       info.className = "prop-row";
       info.innerHTML = `<span class="prop-name"></span><span class="prop-val" style="color:#808080">«${esc(ev.message)}»</span>`;
@@ -410,7 +654,7 @@ function rerender(c) {
   }
 }
 
-/* ---------------- Modo Ejecutar ---------------- */
+/* ==================== MODO EJECUCIÓN ==================== */
 function setMode(mode) {
   state.mode = mode;
   const running = mode === "run";
@@ -426,31 +670,21 @@ function setMode(mode) {
   msg(running ? "Aplicación en ejecución. Pulse ■ para volver al diseño." : "Modo diseño.");
 }
 
-function handleRunClick(c, e) {
-  if (c.type === "checkbox") {
-    c.checked = !c.checked;
+function fireEvent(c, evName) {
+  const ev = c.events[evName];
+  if (!ev || ev.action === "none") return;
+  
+  if (ev.action === "message") {
+    showRetroMessage(ev.message || "(mensaje vacío)", c.name);
+  } else if (ev.action === "alert") {
+    alert(ev.message || "Evento: " + evName);
+  } else if (ev.action === "disable") {
+    c.enabled = !c.enabled;
     renderControl(c);
-    fireEvent(c, "OnChange");
-    fireEvent(c, "OnClick");
-  } else if (c.type === "radio") {
-    state.controls.forEach(o => {
-      if (o.type === "radio" && o.group === c.group && o.checked) { o.checked = false; renderControl(o); }
-    });
-    c.checked = true;
-    renderControl(c);
-    fireEvent(c, "OnChange");
-    fireEvent(c, "OnClick");
-  } else if (c.type === "button") {
-    fireEvent(c, "OnClick");
   }
 }
 
-function fireEvent(c, evName) {
-  const ev = c.events[evName];
-  if (ev && ev.action === "message") showRetroMessage(ev.message || "(mensaje vacío)", c.name);
-}
-
-/* ---------------- Cuadro de mensaje retro ---------------- */
+/* ==================== CUADRO DE MENSAJE RETRO ==================== */
 function showRetroMessage(text, from) {
   const back = document.createElement("div");
   back.className = "modal-backdrop";
@@ -464,7 +698,7 @@ function showRetroMessage(text, from) {
   document.body.appendChild(back);
 }
 
-/* ---------------- Menús ---------------- */
+/* ==================== MENÚS MEJORADOS ==================== */
 const MENUS = {
   file: [
     { label: "Nuevo", shortcut: "Ctrl+N", action: clearForm },
@@ -474,6 +708,9 @@ const MENUS = {
     { label: "Salir", action: () => msg("¡Gracias por usar ObjectVision! (cierre la pestaña para salir)") },
   ],
   edit: [
+    { label: "Deshacer", shortcut: "Ctrl+Z", action: undo },
+    { label: "Rehacer", shortcut: "Ctrl+Y", action: redo },
+    "sep",
     { label: "Eliminar objeto", shortcut: "Supr", action: deleteSelected },
     { label: "Limpiar formulario", action: clearForm },
     "sep",
@@ -544,7 +781,7 @@ function closeMenu() {
 }
 document.addEventListener("click", e => { if (!dropdown.contains(e.target)) closeMenu(); });
 
-/* ---------------- Acciones ---------------- */
+/* ==================== ACCIONES ==================== */
 function deleteSelected() {
   if (!state.selectedId) return msg("No hay ningún objeto seleccionado.");
   const c = getControl(state.selectedId);
@@ -552,12 +789,15 @@ function deleteSelected() {
   document.getElementById(state.selectedId)?.remove();
   msg(`${c.name} eliminado.`);
   selectControl(null);
+  pushHistory();
 }
 
 function clearForm() {
   state.controls = [];
   state.selectedId = null;
   state.counter = {};
+  state.history = [];
+  state.historyIndex = -1;
   renderAll();
   selectControl(null);
   msg("Formulario nuevo creado.");
@@ -569,21 +809,23 @@ function reorderZ(dir) {
   c.z = dir > 0 ? ++state.zTop : 0;
   renderControl(c);
   msg(dir > 0 ? `${c.name} traído al frente.` : `${c.name} enviado al fondo.`);
+  pushHistory();
 }
 
 function resetValues() {
   state.controls.forEach(c => {
-    if (c.type === "edit") c.text = "";
+    if (c.type === "edit" || c.type === "textarea") c.text = "";
     if (c.type === "checkbox" || c.type === "radio") c.checked = false;
-    if (c.type === "listbox") c.selIndex = 0;
+    if (c.type === "listbox" || c.type === "combobox") c.selIndex = 0;
+    if (c.type === "spinner") c.value = c.minValue || 0;
   });
   renderAll();
   msg("Valores reiniciados.");
 }
 
-/* ---------------- Guardar / Abrir (JSON) ---------------- */
+/* ==================== GUARDAR / ABRIR ==================== */
 function exportJSON() {
-  const data = { app: "ObjectVision Web", version: "2.0", form: "Form1", controls: state.controls };
+  const data = { app: "ObjectVision Web", version: "2.1", form: "Form1", controls: state.controls };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -608,6 +850,8 @@ function importJSON() {
         state.controls = data.controls;
         state.selectedId = null;
         state.counter = {};
+        state.history = [];
+        state.historyIndex = -1;
         state.controls.forEach(c => {
           const m = c.name?.match(/(\d+)$/);
           if (m) state.counter[c.type] = Math.max(state.counter[c.type] || 0, +m[1]);
@@ -624,7 +868,7 @@ function importJSON() {
   inp.click();
 }
 
-/* ---------------- Barra de herramientas ---------------- */
+/* ==================== BARRA DE HERRAMIENTAS ==================== */
 document.getElementById("btnNew").addEventListener("click", clearForm);
 document.getElementById("btnSave").addEventListener("click", exportJSON);
 document.getElementById("btnOpen").addEventListener("click", importJSON);
@@ -639,7 +883,7 @@ function toggleModal(show) {
   document.getElementById("aboutModal").classList.toggle("hidden", !show);
 }
 
-/* ---------------- Pestañas del inspector ---------------- */
+/* ==================== PESTAÑAS DEL INSPECTOR ==================== */
 document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
   t.addEventListener("click", () => {
     document.querySelectorAll(".inspector-tabs .tab").forEach(x => x.classList.toggle("active", x === t));
@@ -648,7 +892,7 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
   });
 });
 
-/* ---------------- Ventanas flotantes arrastrables ---------------- */
+/* ==================== VENTANAS FLOTANTES ==================== */
 ["formWindow", "paletteWindow", "inspectorWindow"].forEach(id => {
   const win = document.getElementById(id);
   const bar = win.querySelector(".title-bar");
@@ -681,16 +925,18 @@ function resetWindows() {
   msg("Ventanas reordenadas.");
 }
 
-/* ---------------- Teclado ---------------- */
+/* ==================== TECLADO ==================== */
 document.addEventListener("keydown", e => {
-  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
   if (e.key === "Delete") deleteSelected();
   if (e.key === "F9") setMode(state.mode === "design" ? "run" : "design");
   if (e.key === "Escape") { closeMenu(); toggleModal(false); }
   if (e.ctrlKey && e.key.toLowerCase() === "s") { e.preventDefault(); exportJSON(); }
   if (e.ctrlKey && e.key.toLowerCase() === "o") { e.preventDefault(); importJSON(); }
   if (e.ctrlKey && e.key.toLowerCase() === "n") { e.preventDefault(); clearForm(); }
-  // Mover selección con flechas
+  if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+  if (e.ctrlKey && e.key.toLowerCase() === "y") { e.preventDefault(); redo(); }
+  
   const c = getControl(state.selectedId);
   if (c && state.mode === "design" && e.key.startsWith("Arrow")) {
     e.preventDefault();
@@ -707,26 +953,53 @@ document.addEventListener("keydown", e => {
   }
 });
 
-/* ---------------- Posición del ratón en la barra de estado ---------------- */
+/* ==================== POSICIÓN DEL RATÓN ==================== */
 canvas.addEventListener("pointermove", e => {
   if (state.mode !== "design") return;
   const r = canvas.getBoundingClientRect();
   if (!state.selectedId) stPos.textContent = `X:${Math.round(e.clientX - r.left)} Y:${Math.round(e.clientY - r.top)}`;
 });
 
-/* ---------------- Ejemplo inicial ---------------- */
+/* ==================== EJEMPLO INICIAL MEJORADO ==================== */
 (function seed() {
-  const g = addControl("groupbox", 24, 20); g.caption = "Datos del cliente"; g.width = 300; g.height = 150;
-  const l1 = addControl("label", 44, 56);  l1.caption = "Nombre:";
-  const e1 = addControl("edit", 120, 52);  e1.width = 180;
-  const l2 = addControl("label", 44, 92);  l2.caption = "Ciudad:";
-  const e2 = addControl("edit", 120, 88);  e2.width = 180;
-  const cb = addControl("checkbox", 44, 124); cb.caption = "Cliente preferente";
-  const lb = addControl("listbox", 350, 20); lb.items = "Pedido #1001,Pedido #1002,Pedido #1003,Pedido #1004";
-  const b1 = addControl("button", 120, 200); b1.caption = "Aceptar";
-  b1.events.OnClick = { action: "message", message: "¡Pedido registrado correctamente!" };
-  const b2 = addControl("button", 220, 200); b2.caption = "Cancelar";
-  b2.events.OnClick = { action: "message", message: "Operación cancelada." };
+  const g = addControl("groupbox", 24, 20); 
+  g.caption = "Registro de Cliente"; 
+  g.width = 320; 
+  g.height = 200;
+  
+  const l1 = addControl("label", 44, 56);  
+  l1.caption = "Nombre:";
+  const e1 = addControl("edit", 140, 52);  
+  e1.width = 160;
+  e1.placeholder = "Juan Pérez";
+  
+  const l2 = addControl("label", 44, 92);  
+  l2.caption = "Email:";
+  const e2 = addControl("edit", 140, 88);  
+  e2.width = 160;
+  e2.placeholder = "juan@example.com";
+  
+  const l3 = addControl("label", 44, 128);
+  l3.caption = "Tipo:";
+  const cb = addControl("combobox", 140, 124); 
+  cb.items = "Cliente Normal,Cliente Preferente,Distribuidor";
+  cb.width = 160;
+  
+  const lb = addControl("listbox", 360, 20); 
+  lb.caption = "Últimos pedidos"; 
+  lb.items = "Pedido #1001,Pedido #1002,Pedido #1003,Pedido #1004";
+  lb.width = 200;
+  
+  const b1 = addControl("button", 140, 160); 
+  b1.caption = "Guardar";
+  b1.width = 70;
+  b1.events.OnClick = { action: "message", message: "¡Cliente registrado correctamente!" };
+  
+  const b2 = addControl("button", 230, 160); 
+  b2.caption = "Limpiar";
+  b2.width = 70;
+  b2.events.OnClick = { action: "message", message: "Formulario limpiado." };
+  
   selectControl(null);
-  msg("Borland ObjectVision 2.0 — Formulario de ejemplo cargado. ¡Elija una herramienta de la paleta!");
+  msg("ObjectVision 2.1 — Formulario mejorado cargado. ¡Comience a diseñar!");
 })();
