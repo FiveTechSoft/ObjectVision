@@ -1,0 +1,346 @@
+/* ============================================================
+   Borland ObjectVision — estilo retro Windows 3.x / Borland
+   ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+
+:root {
+  --ov-gray: #c0c0c0;
+  --ov-dark: #808080;
+  --ov-darker: #404040;
+  --ov-light: #dfdfdf;
+  --ov-white: #ffffff;
+  --ov-navy: #000080;
+  --ov-teal: #008080;
+}
+
+html, body { height: 100%; }
+
+body {
+  background: var(--ov-teal);
+  font-family: "MS Sans Serif", "Pixelated MS Sans Serif", Tahoma, Geneva, sans-serif;
+  font-size: 11px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Ventanas ---------- */
+.window {
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) var(--ov-darker) var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light), inset -1px -1px 0 var(--ov-dark), 2px 2px 0 rgba(0,0,0,.35);
+  padding: 2px;
+}
+
+.title-bar {
+  background: linear-gradient(90deg, var(--ov-navy), #1084d0);
+  color: #fff;
+  font-weight: bold;
+  padding: 2px 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  letter-spacing: .5px;
+  cursor: default;
+}
+.title-bar.small { font-size: 10px; padding: 2px 4px; }
+.title-text { pointer-events: none; }
+
+.title-buttons { display: flex; gap: 2px; }
+.tb-btn {
+  width: 16px; height: 14px;
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) var(--ov-darker) var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light), inset -1px -1px 0 var(--ov-dark);
+  font-size: 9px; line-height: 1; cursor: pointer;
+}
+.tb-btn:active { border-color: var(--ov-darker) var(--ov-white) var(--ov-white) var(--ov-darker); }
+
+/* ---------- Ventana principal ---------- */
+.main-window {
+  width: 980px;
+  height: 640px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Menú ---------- */
+.menu-bar {
+  display: flex;
+  background: var(--ov-gray);
+  border-bottom: 1px solid var(--ov-dark);
+  position: relative;
+}
+.menu-item { padding: 3px 9px; cursor: default; }
+.menu-item:hover, .menu-item.open { background: var(--ov-navy); color: #fff; }
+
+.dropdown {
+  position: fixed;
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) var(--ov-darker) var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light), inset -1px -1px 0 var(--ov-dark), 2px 2px 0 rgba(0,0,0,.35);
+  min-width: 190px;
+  z-index: 500;
+  padding: 2px;
+}
+.dropdown .dd-item { padding: 4px 22px 4px 24px; cursor: default; display: flex; justify-content: space-between; gap: 20px; }
+.dropdown .dd-item:hover { background: var(--ov-navy); color: #fff; }
+.dropdown .dd-sep { height: 1px; background: var(--ov-dark); border-bottom: 1px solid var(--ov-white); margin: 3px 2px; }
+.dropdown .shortcut { opacity: .8; }
+
+/* ---------- SpeedBar ---------- */
+.speedbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-bottom: 1px solid var(--ov-dark);
+  background: var(--ov-gray);
+}
+.sp-btn {
+  width: 26px; height: 24px;
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) var(--ov-darker) var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light), inset -1px -1px 0 var(--ov-dark);
+  cursor: pointer; font-size: 12px;
+}
+.sp-btn:active, .sp-btn.pushed {
+  border-color: var(--ov-darker) var(--ov-white) var(--ov-white) var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+  background: var(--ov-light);
+}
+.sp-sep { width: 1px; height: 20px; background: var(--ov-dark); border-right: 1px solid var(--ov-white); margin: 0 4px; }
+
+/* ---------- Área MDI ---------- */
+.mdi-area {
+  flex: 1;
+  position: relative;
+  background: var(--ov-dark);
+  overflow: hidden;
+}
+
+/* ---------- Ventana del formulario ---------- */
+.form-window {
+  position: absolute;
+  left: 16px; top: 16px;
+  width: 620px; height: 480px;
+  display: flex; flex-direction: column;
+  z-index: 10;
+}
+.form-canvas {
+  flex: 1;
+  background: var(--ov-gray);
+  position: relative;
+  overflow: hidden;
+  outline: 1px solid var(--ov-darker);
+}
+.form-canvas.design {
+  background-image: radial-gradient(var(--ov-dark) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+.form-canvas.run { background-image: none; background: var(--ov-gray); }
+
+/* ---------- Paleta ---------- */
+.palette-window {
+  position: absolute;
+  right: 16px; top: 16px;
+  width: 130px;
+  z-index: 20;
+}
+.palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 4px;
+}
+.pal-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 5px 2px;
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) var(--ov-darker) var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light), inset -1px -1px 0 var(--ov-dark);
+  cursor: pointer;
+  font-size: 9px;
+  text-align: center;
+}
+.pal-btn .ico { font-size: 14px; }
+.pal-btn.active {
+  border-color: var(--ov-darker) var(--ov-white) var(--ov-white) var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+  background: var(--ov-light);
+}
+
+/* ---------- Inspector ---------- */
+.inspector-window {
+  position: absolute;
+  right: 16px; top: 290px;
+  width: 290px;
+  height: 270px;
+  display: flex; flex-direction: column;
+  z-index: 20;
+}
+.inspector-tabs { display: flex; padding: 3px 3px 0; gap: 2px; }
+.tab {
+  padding: 3px 10px;
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) transparent var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light);
+  cursor: pointer; font-size: 10px;
+}
+.tab.active { background: var(--ov-white); font-weight: bold; box-shadow: none; }
+.inspector-body {
+  flex: 1;
+  background: var(--ov-white);
+  border: 1px solid var(--ov-darker);
+  margin: 0 3px 3px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.inspector-body.hidden { display: none; }
+
+.prop-row { display: flex; align-items: center; gap: 4px; padding: 2px 1px; }
+.prop-row:hover { background: #e8e8f8; }
+.prop-name { width: 88px; flex-shrink: 0; }
+.prop-val { flex: 1; }
+.prop-val input, .prop-val select {
+  width: 100%;
+  font: inherit;
+  border: 1px solid var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+  padding: 1px 3px;
+  background: #fff;
+}
+.prop-val input[type="color"] { padding: 0; height: 18px; }
+
+.ev-row { display: flex; align-items: center; gap: 4px; padding: 3px 2px; }
+.ev-row:hover { background: #e8e8f8; }
+.ev-name { width: 88px; flex-shrink: 0; color: var(--ov-navy); font-weight: bold; }
+.ev-name .bolt { color: #aa8000; }
+
+.insp-empty { padding: 10px; color: var(--ov-dark); font-style: italic; }
+
+/* ---------- Barra de estado ---------- */
+.status-bar {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--ov-gray);
+  border-top: 1px solid var(--ov-dark);
+}
+.status-cell {
+  border: 1px solid;
+  border-color: var(--ov-dark) var(--ov-white) var(--ov-white) var(--ov-dark);
+  padding: 2px 8px;
+  min-width: 80px;
+}
+.status-cell.grow { flex: 1; }
+
+/* ---------- Controles ObjectVision en el formulario ---------- */
+.ov-control { position: absolute; }
+.ov-control.selected { outline: 1px dashed var(--ov-navy); }
+.ov-control.selected::after {
+  content: "";
+  position: absolute; right: -5px; bottom: -5px;
+  width: 8px; height: 8px;
+  background: var(--ov-navy);
+  border: 1px solid #fff;
+  cursor: nwse-resize;
+  z-index: 5;
+}
+
+.ov-label { display: flex; align-items: center; color: #000; background: transparent; overflow: hidden; }
+
+.ov-button-ctl, .ov-button {
+  background: var(--ov-gray);
+  border: 1px solid;
+  border-color: var(--ov-white) var(--ov-darker) var(--ov-darker) var(--ov-white);
+  box-shadow: inset 1px 1px 0 var(--ov-light), inset -1px -1px 0 var(--ov-dark);
+  display: flex; align-items: center; justify-content: center;
+  font: inherit;
+  cursor: default;
+  overflow: hidden;
+}
+.form-canvas.run .ov-button-ctl { cursor: pointer; }
+.form-canvas.run .ov-button-ctl:active {
+  border-color: var(--ov-darker) var(--ov-white) var(--ov-white) var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+}
+.ov-button { padding: 4px 16px; cursor: pointer; font-size: 11px; }
+.ov-button:active { border-color: var(--ov-darker) var(--ov-white) var(--ov-white) var(--ov-darker); box-shadow: inset 1px 1px 0 var(--ov-dark); }
+
+.ov-edit-ctl {
+  background: #fff;
+  border: 1px solid var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+  display: flex; align-items: center;
+  padding: 0 3px;
+  overflow: hidden;
+}
+.ov-edit-ctl input { border: none; outline: none; font: inherit; width: 100%; background: transparent; }
+
+.ov-check-ctl, .ov-radio-ctl { display: flex; align-items: center; gap: 5px; overflow: hidden; }
+.ov-check-ctl .box, .ov-radio-ctl .box {
+  width: 13px; height: 13px; flex-shrink: 0;
+  background: #fff;
+  border: 1px solid var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+}
+.ov-radio-ctl .box { border-radius: 50%; }
+.ov-radio-ctl .box.on::after { content: ""; width: 7px; height: 7px; background: #000; border-radius: 50%; }
+
+.ov-list-ctl {
+  background: #fff;
+  border: 1px solid var(--ov-darker);
+  box-shadow: inset 1px 1px 0 var(--ov-dark);
+  overflow-y: auto;
+  padding: 1px;
+}
+.ov-list-ctl .li { padding: 1px 4px; }
+.form-canvas.run .ov-list-ctl .li:hover { background: #e8e8f8; }
+.ov-list-ctl .li.sel { background: var(--ov-navy); color: #fff; }
+
+.ov-group-ctl {
+  border: 1px solid;
+  border-color: var(--ov-dark) var(--ov-white) var(--ov-white) var(--ov-dark);
+  box-shadow: inset 1px 1px 0 var(--ov-white), inset -1px -1px 0 var(--ov-dark);
+}
+.ov-group-ctl .gtitle {
+  position: absolute; top: -7px; left: 8px;
+  background: var(--ov-gray);
+  padding: 0 4px;
+}
+
+.ov-panel-ctl {
+  border: 1px solid;
+  border-color: var(--ov-dark) var(--ov-white) var(--ov-white) var(--ov-dark);
+}
+
+/* ---------- Diálogo ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.dialog { width: 340px; }
+.dialog-body { padding: 14px; text-align: center; }
+.dialog-body p { margin: 6px 0; }
+.dialog-body .fine { font-size: 9px; color: var(--ov-darker); }
+.about-logo {
+  font-size: 20px; font-weight: bold; color: var(--ov-navy);
+  border: 2px groove var(--ov-gray);
+  background: #fff;
+  padding: 8px; margin-bottom: 8px;
+}
+.dialog-buttons { display: flex; justify-content: center; padding: 0 0 12px; }
+
+.hidden { display: none !important; }

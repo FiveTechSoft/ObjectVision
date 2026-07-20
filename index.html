@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Borland ObjectVision</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ======== VENTANA PRINCIPAL ======== -->
+<div class="window main-window" id="mainWindow">
+  <div class="title-bar">
+    <span class="title-text">◆ Borland ObjectVision</span>
+    <div class="title-buttons">
+      <button class="tb-btn" title="Minimizar">_</button>
+      <button class="tb-btn" title="Maximizar">▢</button>
+    </div>
+  </div>
+
+  <!-- Menú -->
+  <div class="menu-bar" id="menuBar">
+    <div class="menu-item" data-menu="file">Archivo</div>
+    <div class="menu-item" data-menu="edit">Editar</div>
+    <div class="menu-item" data-menu="view">Ver</div>
+    <div class="menu-item" data-menu="object">Objeto</div>
+    <div class="menu-item" data-menu="run">Ejecutar</div>
+    <div class="menu-item" data-menu="help">Ayuda</div>
+  </div>
+
+  <!-- SpeedBar -->
+  <div class="speedbar">
+    <button class="sp-btn" id="btnNew" title="Nuevo formulario">📄</button>
+    <button class="sp-btn" id="btnSave" title="Guardar (exportar JSON)">💾</button>
+    <button class="sp-btn" id="btnOpen" title="Abrir (importar JSON)">📂</button>
+    <span class="sp-sep"></span>
+    <button class="sp-btn" id="btnCut" title="Eliminar objeto">✂</button>
+    <button class="sp-btn" id="btnClear" title="Limpiar formulario">🗑</button>
+    <span class="sp-sep"></span>
+    <button class="sp-btn" id="btnRun" title="Ejecutar / Diseñar">▶</button>
+    <span class="sp-sep"></span>
+    <button class="sp-btn" id="btnAbout" title="Acerca de…">❓</button>
+  </div>
+
+  <!-- Área MDI -->
+  <div class="mdi-area" id="mdiArea">
+
+    <!-- Ventana: Diseñador de formulario -->
+    <div class="window form-window" id="formWindow">
+      <div class="title-bar small">
+        <span class="title-text" id="formTitle">Form1 — Diseño</span>
+      </div>
+      <div class="form-canvas design" id="formCanvas"></div>
+    </div>
+
+    <!-- Ventana: Paleta de objetos -->
+    <div class="window palette-window" id="paletteWindow">
+      <div class="title-bar small">
+        <span class="title-text">Objetos</span>
+      </div>
+      <div class="palette" id="palette"></div>
+    </div>
+
+    <!-- Ventana: Inspector -->
+    <div class="window inspector-window" id="inspectorWindow">
+      <div class="title-bar small">
+        <span class="title-text">Inspector — <span id="inspectorTarget">(nada)</span></span>
+      </div>
+      <div class="inspector-tabs">
+        <button class="tab active" data-tab="props">Propiedades</button>
+        <button class="tab" data-tab="events">Eventos</button>
+      </div>
+      <div class="inspector-body" id="inspectorProps"></div>
+      <div class="inspector-body hidden" id="inspectorEvents"></div>
+    </div>
+
+  </div>
+
+  <!-- Barra de estado -->
+  <div class="status-bar">
+    <span class="status-cell" id="stMode">Diseño</span>
+    <span class="status-cell" id="stSel">Sin selección</span>
+    <span class="status-cell" id="stPos">X:0 Y:0</span>
+    <span class="status-cell grow" id="stMsg">Borland ObjectVision 2.0 — Listo.</span>
+  </div>
+</div>
+
+<!-- Menús desplegables -->
+<div class="dropdown hidden" id="dropdown"></div>
+
+<!-- Diálogo Acerca de -->
+<div class="modal-backdrop hidden" id="aboutModal">
+  <div class="window dialog">
+    <div class="title-bar"><span class="title-text">Acerca de ObjectVision</span></div>
+    <div class="dialog-body">
+      <div class="about-logo">◆ ObjectVision™</div>
+      <p><b>Borland ObjectVision 2.0</b></p>
+      <p>Recreación web en HTML + CSS + JavaScript.<br>Homenaje al clásico de Borland (1992).</p>
+      <p class="fine">Copyright © 1992 Borland International, Inc.<br>Recreación con fines educativos.</p>
+    </div>
+    <div class="dialog-buttons">
+      <button class="ov-button" id="btnAboutOk">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
