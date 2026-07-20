@@ -955,53 +955,280 @@ document.querySelectorAll(".inspector-tabs .tab").forEach(t => {
   });
 });
 
-/* ==================== VENTANA PRINCIPAL (arrastrable) ==================== */
-(function enableMainWindowDrag() {
+/* ==================== VENTANA PRINCIPAL (arrastrable + redimensionable) ==================== */
+(function enableMainWindow() {
   const win = document.getElementById("mainWindow");
   if (!win) return;
-  const bar = win.querySelector(":scope > .title-bar");
-  if (!bar) return;
+  const bar = win.querySelector(".title-bar");
+  if (!bar || !win.contains(bar)) return;
 
-  function centerMainWindow() {
-    const w = win.offsetWidth || 1024;
-    const h = win.offsetHeight || 680;
-    win.style.left = Math.max(0, Math.round((window.innerWidth - w) / 2)) + "px";
-    win.style.top = Math.max(0, Math.round((window.innerHeight - h) / 2)) + "px";
+  const EDGE = 10;
+  const MIN_W = 480;
+  const MIN_H = 360;
+  let restored = null;
+  let maximized = false;
+  let dragging = false;
+  let resizing = false;
+
+  function minW() { return Math.min(MIN_W, window.innerWidth); }
+  function minH() { return Math.min(MIN_H, window.innerHeight); }
+
+  function placeFromRect(r) {
+    win.classList.add("placed");
+    win.style.transform = "none";
+    win.style.left = Math.round(r.left) + "px";
+    win.style.top = Math.round(r.top) + "px";
+    win.style.width = Math.round(r.width) + "px";
+    win.style.height = Math.round(r.height) + "px";
   }
-  centerMainWindow();
-  window.addEventListener("resize", () => {
-    // Mantener la ventana visible si se redimensiona el navegador
+
+  function applyBox(left, top, width, height) {
+    win.classList.add("placed");
+    win.style.transform = "none";
+    win.style.left = Math.round(left) + "px";
+    win.style.top = Math.round(top) + "px";
+    win.style.width = Math.round(width) + "px";
+    win.style.height = Math.round(height) + "px";
+  }
+
+  // Fijar posición real (quita el translate CSS de centrado)
+  placeFromRect(win.getBoundingClientRect());
+
+  function setMaximizedUI(isMax) {
+    maximized = isMax;
+    win.classList.toggle("maximized", isMax);
+    const maxBtn = document.getElementById("btnMaximize");
+    if (maxBtn) {
+      maxBtn.title = isMax ? "Restaurar" : "Maximizar";
+      maxBtn.textContent = isMax ? "❐" : "▢";
+    }
+  }
+
+  function maximizeWindow() {
+    if (maximized) return;
     const r = win.getBoundingClientRect();
-    const maxL = Math.max(0, window.innerWidth - 80);
-    const maxT = Math.max(0, window.innerHeight - 40);
-    if (r.left > maxL) win.style.left = maxL + "px";
-    if (r.top > maxT) win.style.top = maxT + "px";
-    if (r.left < 0) win.style.left = "0px";
-    if (r.top < 0) win.style.top = "0px";
+    restored = { left: r.left, top: r.top, width: r.width, height: r.height };
+    win.dataset.minimized = "0";
+    setMaximizedUI(true);
+  }
+
+  function restoreWindow() {
+    if (!maximized && win.dataset.minimized !== "1") return;
+    win.dataset.minimized = "0";
+    if (restored) applyBox(restored.left, restored.top, restored.width, restored.height);
+    else {
+      const w = Math.min(1024, window.innerWidth - 16);
+      const h = Math.min(680, window.innerHeight - 16);
+      applyBox((window.innerWidth - w) / 2, (window.innerHeight - h) / 2, w, h);
+    }
+    restored = null;
+    setMaximizedUI(false);
+  }
+
+  function toggleMaximize(ev) {
+    if (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    if (maximized) restoreWindow();
+    else maximizeWindow();
+  }
+
+  // API global (también usada por onclick del HTML)
+  window.__ovToggleMax = toggleMaximize;
+  window.__ovMaximize = maximizeWindow;
+  window.__ovRestore = restoreWindow;
+
+  function edgeDir(clientX, clientY) {
+    if (maximized) return "";
+    const r = win.getBoundingClientRect();
+    // Solo si el puntero está sobre o muy cerca del marco de la ventana
+    if (clientX < r.left - 2 || clientX > r.right + 2 ||
+        clientY < r.top - 2 || clientY > r.bottom + 2) return "";
+    let dir = "";
+    if (clientY - r.top <= EDGE) dir += "n";
+    else if (r.bottom - clientY <= EDGE) dir += "s";
+    if (clientX - r.left <= EDGE) dir += "w";
+    else if (r.right - clientX <= EDGE) dir += "e";
+    return dir;
+  }
+
+  function cursorForDir(dir) {
+    if (dir === "n" || dir === "s") return "ns-resize";
+    if (dir === "e" || dir === "w") return "ew-resize";
+    if (dir === "ne" || dir === "sw") return "nesw-resize";
+    if (dir === "nw" || dir === "se") return "nwse-resize";
+    return "";
+  }
+
+  // Cursor al pasar por los bordes (aunque haya hijos encima)
+  document.addEventListener("mousemove", e => {
+    if (dragging || resizing || maximized) return;
+    if (e.target.closest(".tb-btn, #btnMaximize, #btnMinimize")) {
+      document.body.style.cursor = "";
+      return;
+    }
+    const dir = edgeDir(e.clientX, e.clientY);
+    document.body.style.cursor = cursorForDir(dir) || "";
   });
 
-  bar.addEventListener("pointerdown", e => {
-    if (e.button !== 0) return;
-    // No arrastrar al pulsar los botones de la barra
-    if (e.target.closest(".title-buttons, .tb-btn")) return;
-    e.preventDefault();
+  function startMainResize(e, dir) {
+    resizing = true;
+    if (maximized) {
+      maximized = false;
+      restored = null;
+      setMaximizedUI(false);
+    }
+    win.dataset.minimized = "0";
+
     const r = win.getBoundingClientRect();
+    const start = { left: r.left, top: r.top, width: r.width, height: r.height };
+    const sx = e.clientX, sy = e.clientY;
+
+    const move = ev => {
+      const dx = ev.clientX - sx;
+      const dy = ev.clientY - sy;
+      let left = start.left, top = start.top, width = start.width, height = start.height;
+
+      if (dir.includes("e")) width = start.width + dx;
+      if (dir.includes("s")) height = start.height + dy;
+      if (dir.includes("w")) { width = start.width - dx; left = start.left + dx; }
+      if (dir.includes("n")) { height = start.height - dy; top = start.top + dy; }
+
+      const mw = minW(), mh = minH();
+      if (width < mw) {
+        if (dir.includes("w")) left = start.left + start.width - mw;
+        width = mw;
+      }
+      if (height < mh) {
+        if (dir.includes("n")) top = start.top + start.height - mh;
+        height = mh;
+      }
+      if (left < 0) { if (dir.includes("w")) width = Math.max(mw, width + left); left = 0; }
+      if (top < 0) { if (dir.includes("n")) height = Math.max(mh, height + top); top = 0; }
+      if (left + width > window.innerWidth) width = Math.max(mw, window.innerWidth - left);
+      if (top + height > window.innerHeight) height = Math.max(mh, window.innerHeight - top);
+
+      applyBox(left, top, width, height);
+    };
+
+    const up = () => {
+      resizing = false;
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.style.cursor = "";
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  // Capture: redimensionar por bordes aunque el clic caiga en un hijo
+  document.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    if (e.target.closest("#btnMaximize, #btnMinimize, .tb-btn")) return;
+    if (e.target.closest(".dropdown, .modal-backdrop, input, select, textarea, button.sp-btn, .pal-btn, .tab")) return;
+    if (e.target.closest(".ov-control, .ctl-resize-handle, .win-resize-handle")) return;
+
+    const dir = edgeDir(e.clientX, e.clientY);
+    if (!dir) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    startMainResize(e, dir);
+  }, true);
+
+  // Grip inferior derecho (fallback visual y de clic)
+  const grip = document.createElement("div");
+  grip.className = "main-window-grip";
+  grip.title = "Redimensionar ventana";
+  grip.addEventListener("mousedown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    startMainResize(e, "se");
+  });
+  win.appendChild(grip);
+
+  // Arrastre por la barra de título
+  bar.addEventListener("mousedown", e => {
+    if (e.button !== 0) return;
+    if (e.target.closest(".title-buttons, .tb-btn, button, #btnMaximize, #btnMinimize")) return;
+    if (maximized) return;
+    // Si el clic es en el borde superior, redimensionar (no arrastrar)
+    const dir = edgeDir(e.clientX, e.clientY);
+    if (dir) return;
+
+    e.preventDefault();
+    dragging = true;
+    win.dataset.minimized = "0";
+    const r = win.getBoundingClientRect();
+    placeFromRect(r);
     const dx = e.clientX - r.left;
     const dy = e.clientY - r.top;
-    try { bar.setPointerCapture(e.pointerId); } catch (_) {}
 
     const move = ev => {
       const left = Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - 80);
       const top = Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - 40);
-      win.style.left = left + "px";
-      win.style.top = top + "px";
+      applyBox(left, top, r.width, r.height);
     };
     const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      dragging = false;
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+
+  // Doble clic en la barra = maximizar / restaurar
+  bar.addEventListener("dblclick", e => {
+    if (e.target.closest(".title-buttons, .tb-btn, button")) return;
+    e.preventDefault();
+    toggleMaximize();
+  });
+
+  // Botones maximizar / minimizar
+  const maxBtn = document.getElementById("btnMaximize");
+  if (maxBtn) {
+    maxBtn.addEventListener("mousedown", e => { e.preventDefault(); e.stopPropagation(); });
+    maxBtn.addEventListener("click", e => toggleMaximize(e));
+  }
+
+  const minBtn = document.getElementById("btnMinimize");
+  if (minBtn) {
+    minBtn.addEventListener("mousedown", e => { e.preventDefault(); e.stopPropagation(); });
+    minBtn.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (win.dataset.minimized === "1") {
+        restoreWindow();
+        minBtn.title = "Minimizar";
+      } else {
+        if (!maximized) {
+          const r = win.getBoundingClientRect();
+          restored = { left: r.left, top: r.top, width: r.width, height: r.height };
+        } else {
+          // ya guardado en restored al maximizar
+          setMaximizedUI(false);
+          maximized = false;
+        }
+        applyBox(8, window.innerHeight - 36, 240, 32);
+        win.dataset.minimized = "1";
+        minBtn.title = "Restaurar";
+      }
+    });
+  }
+
+  window.addEventListener("resize", () => {
+    if (maximized) return; // CSS .maximized ya llena el viewport
+    const r = win.getBoundingClientRect();
+    let left = r.left, top = r.top, width = r.width, height = r.height;
+    if (width > window.innerWidth) width = window.innerWidth;
+    if (height > window.innerHeight) height = window.innerHeight;
+    if (left + width > window.innerWidth) left = Math.max(0, window.innerWidth - width);
+    if (top + height > window.innerHeight) top = Math.max(0, window.innerHeight - height);
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    applyBox(left, top, width, height);
   });
 })();
 
