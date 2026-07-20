@@ -186,6 +186,14 @@ function renderControl(c) {
       el.textContent = c.caption;
       el.style.color = c.color;
       el.style.fontSize = c.fontSize + "px";
+      if (state.mode === "run") {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          if (!c.enabled) return;
+          fireEvent(c, "OnClick");
+        });
+      }
       break;
       
     case "edit": {
@@ -684,21 +692,35 @@ function buildInspector() {
       <option value="disable"${ev.action === "disable" ? " selected" : ""}>Desactivar control</option>`;
     sel.addEventListener("change", () => {
       ev.action = sel.value;
-      if (ev.action === "message" || ev.action === "alert") {
-        const t = prompt("Texto para " + evName + ":", ev.message || "");
-        ev.message = t ?? ev.message;
+      if ((ev.action === "message" || ev.action === "alert") && !ev.message) {
+        ev.message = "Hola desde " + (c.name || evName);
       }
       buildInspector();
+      pushHistory();
     });
     wrap.appendChild(sel);
     row.appendChild(wrap);
     inspEvents.appendChild(row);
-    
-    if ((ev.action === "message" || ev.action === "alert") && ev.message) {
-      const info = document.createElement("div");
-      info.className = "prop-row";
-      info.innerHTML = `<span class="prop-name"></span><span class="prop-val" style="color:#808080">«${esc(ev.message)}»</span>`;
-      inspEvents.appendChild(info);
+
+    // Campo editable del texto del mensaje/alerta
+    if (ev.action === "message" || ev.action === "alert") {
+      const msgRow = document.createElement("div");
+      msgRow.className = "prop-row";
+      msgRow.innerHTML = `<span class="prop-name">Texto</span>`;
+      const msgWrap = document.createElement("span");
+      msgWrap.className = "prop-val";
+      const msgInp = document.createElement("input");
+      msgInp.type = "text";
+      msgInp.value = ev.message || "";
+      msgInp.placeholder = "Texto a mostrar…";
+      msgInp.addEventListener("change", () => {
+        ev.message = msgInp.value;
+        pushHistory();
+      });
+      msgInp.addEventListener("input", () => { ev.message = msgInp.value; });
+      msgWrap.appendChild(msgInp);
+      msgRow.appendChild(msgWrap);
+      inspEvents.appendChild(msgRow);
     }
   });
 }
@@ -734,13 +756,15 @@ function setMode(mode) {
 }
 
 function fireEvent(c, evName) {
+  if (!c || !c.events) return;
   const ev = c.events[evName];
-  if (!ev || ev.action === "none") return;
-  
+  if (!ev || !ev.action || ev.action === "none") return;
+
   if (ev.action === "message") {
-    showRetroMessage(ev.message || "(mensaje vacío)", c.name);
+    showRetroMessage(ev.message || "(mensaje vacío)", c.name || "ObjectVision");
   } else if (ev.action === "alert") {
-    alert(ev.message || "Evento: " + evName);
+    // Cuadro nativo del navegador
+    window.alert(ev.message || ("Evento: " + evName));
   } else if (ev.action === "disable") {
     c.enabled = !c.enabled;
     renderControl(c);
@@ -751,14 +775,18 @@ function fireEvent(c, evName) {
 function showRetroMessage(text, from) {
   const back = document.createElement("div");
   back.className = "modal-backdrop";
+  back.style.zIndex = "100000";
   back.innerHTML = `
     <div class="window dialog" style="width:300px">
       <div class="title-bar"><span class="title-text">${esc(from)} — ObjectVision</span></div>
       <div class="dialog-body"><p>ℹ️ ${esc(text)}</p></div>
-      <div class="dialog-buttons"><button class="ov-button">Aceptar</button></div>
+      <div class="dialog-buttons"><button type="button" class="ov-button">Aceptar</button></div>
     </div>`;
-  back.querySelector("button").addEventListener("click", () => back.remove());
+  const close = () => back.remove();
+  back.querySelector("button").addEventListener("click", close);
+  back.addEventListener("click", e => { if (e.target === back) close(); });
   document.body.appendChild(back);
+  back.querySelector("button").focus();
 }
 
 /* ==================== MENÚS MEJORADOS ==================== */
